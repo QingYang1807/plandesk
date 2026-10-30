@@ -1,0 +1,14 @@
+{
+  "name": "@plandesk/schema",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "npm run typecheck:tsc",
+    "typecheck:tsc": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
+}

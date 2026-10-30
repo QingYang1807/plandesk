@@ -1,0 +1,30 @@
+{
+  "name": "plan-desk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node --import tsx packages/server/src/index.ts --dev",
+    "build": "npm run build -w @plandesk/client",
+    "start": "node --import tsx packages/server/src/index.ts",
+    "check": "npm run check:format && npm run typecheck --workspaces --if-present",
+    "test": "npm test -w @plandesk/core && npm test -w @plandesk/server && npm run test:unit -w @plandesk/client",
+    "test:e2e": "npm test -w @plandesk/client",
+    "check:format": "prettier --check packages/*/src packages/*/test packages/client/e2e packages/client/*.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "prettier": "3.9.10",
+    "sharp": "^0.35.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

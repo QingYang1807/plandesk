@@ -1,0 +1,12 @@
+请依据 plandesk-v1.schema.json，为以下项目生成可编辑的 PlanDesk 项目计划，只输出纯 JSON，不加 Markdown 代码围栏。
+项目主题：[填写目标、范围、开始日期、团队、约束和交付物]
+要求：schemaVersion=1；project 必须有唯一 id、name、start(YYYY-MM-DD)；calendar={weekdays:[1,2,3,4,5],holidays:[]}。
+tasks 每个条目至少包含 id,parentId,order,name,type,start,end,progress,status,owner,dependencies,deliverables,acceptanceCriteria。
+type 可为 task/phase/milestone/review；status 可为 todo/doing/blocked/done/cancelled。
+开始和结束必须同时是合法日期或同时为 null；不确定排期请用 null，不要为完整外观编造日期。
+父任务日期和进度会由系统聚合，不应承诺独立工期；里程碑日期相同、工期0，不能含子任务。
+顶层 dependencies 是唯一关系真源：[{id,from,to,type:'FS',lag:0}]，只连接叶子任务，不得循环。任务内 dependencies 填该任务的前置任务ID。
+FS 使用前序完成边界：普通任务展示结束日期后的下一个工作日；零工期里程碑的完成边界与开始相同。Lag/Lead 以工作日计。
+分解为3—5层，使用真实工作包与可验证的交付物/AC，能并行的工作可并行，里程碑用于评审准入与交付检查。
+工期只能是可编辑的初始建议，不应声称已经过团队承诺或估算评审。没有历史记录时 history=[]。
+顶层还包含 milestones:[里程碑ID]、baseline:[]。所有引用必须指向文件内真实 ID。

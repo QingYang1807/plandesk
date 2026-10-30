@@ -1,0 +1,9 @@
+{
+  "node": "v26.10.0",
+  "tasks": 1000,
+  "dependencies": 999,
+  "schedulingMs": 38.46,
+  "cpmMs": 32.92,
+  "criticalCount": 1000,
+  "browserRendering": "not measured"
+}

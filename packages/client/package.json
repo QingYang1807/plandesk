@@ -1,0 +1,27 @@
+{
+  "name": "@plandesk/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "npm run typecheck:tsc",
+    "test": "playwright test",
+    "typecheck:tsc": "tsgo --noEmit",
+    "test:unit": "vitest run test"
+  },
+  "dependencies": {
+    "@plandesk/schema": "*",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "lucide-react": "0.468.0",
+    "jspdf": "4.2.1"
+  },
+  "devDependencies": {
+    "vite": "7.3.7",
+    "@vitejs/plugin-react": "5.2.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@playwright/test": "1.64.1"
+  }
+}
