@@ -44,8 +44,10 @@ Files: packages/client/src/Views.tsx, App.tsx, styles.css, packages/client/e2e/w
 
 ## 本地验收记录
 
-2026-10-31：Core 29、Server 5、Client 6 单元测试通过；全仓 npm run check 和生产构建通过。PLANDESK_TEST_PORT=14320 npm test（packages/client）6 项真实浏览器验收全部通过，包含原项目生命周期、导出及服务重启。
+2026-10-31：Core 29、Server 5、Client 6 单元测试通过；全仓 npm run check 和生产构建通过。PLANDESK_TEST_PORT=14320 npm test（packages/client）7 项真实浏览器验收全部通过，包含原项目生命周期、导出及服务重启。
 
 实际先复现了点击日期无表单、键盘 Tab 被全局缩进拦截、对话框焦点落在关闭按钮三个问题，再修复验证。原生命周期脚本的任务名 Tab 并不触发失焦，日期 Tab 也可能只切换日期字段内部片段，因此改用显式 blur 提交后再操作；类型选择器改用实际标签的非精确匹配。默认测试端口被其他服务占用，新增可选 PLANDESK_TEST_PORT，默认仍为4320。未修改该服务或真实数据。
 
 用户已明确要求完整开发并发布，采用现有干净工作目录的功能分支，不新增 worktree 或交互设计审批。
+
+独立只读审查发现一项 Important：直接卸载原生 dialog 丢失焦点，后续 Tab 可能将第二个新任务缩进为第一个的子任务。已先添加失败用例，修复为先关闭原生对话框，再恢复到发起操作的日期按钮。保存、Escape、取消后直接按键的回归通过，任务 parentId 保持 [null, null]。完整7项浏览器验收及40项单元测试重新通过，无遗留审查问题。Safari 和实体触屏未实测；触屏验收使用 Chromium 原生触摸事件。

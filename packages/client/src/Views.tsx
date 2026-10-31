@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Plan, Task } from "@plandesk/schema";
 import {
   metrics,
@@ -292,6 +292,13 @@ export function CalendarView(
     start: string;
     end: string;
   } | null>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const source = useRef<HTMLButtonElement>(null);
+  function close() {
+    dialog.current?.close();
+    setDraft(null);
+    source.current?.focus();
+  }
   function shift(n: number) {
     const d = new Date(anchor + "-01T00:00:00Z");
     d.setUTCMonth(d.getUTCMonth() + n);
@@ -331,13 +338,18 @@ export function CalendarView(
             (e.target as HTMLElement).closest("[data-calendar-task]")
           )
             return;
-          const d = (e.target as HTMLElement).closest<HTMLElement>(
+          const cell = (e.target as HTMLElement).closest<HTMLElement>(
             "[data-calendar-date]",
-          )?.dataset.calendarDate;
-          if (!d) return;
+          );
+          if (!cell?.dataset.calendarDate) return;
+          source.current =
+            cell.querySelector<HTMLButtonElement>(".calendar-date");
           e.preventDefault();
           e.currentTarget.setPointerCapture(e.pointerId);
-          setSelection({ start: d, end: d });
+          setSelection({
+            start: cell.dataset.calendarDate,
+            end: cell.dataset.calendarDate,
+          });
         }}
         onPointerMove={(e) => {
           if (!selection || !e.currentTarget.hasPointerCapture(e.pointerId))
@@ -395,7 +407,10 @@ export function CalendarView(
                 className="calendar-date"
                 aria-label={`${d} 创建任务`}
                 onClick={(e) => {
-                  if (e.detail === 0) setDraft({ name: "", start: d, end: d });
+                  if (e.detail === 0) {
+                    source.current = e.currentTarget;
+                    setDraft({ name: "", start: d, end: d });
+                  }
                 }}
               >
                 <span>{Number(d.slice(8))}</span>
@@ -430,6 +445,7 @@ export function CalendarView(
           className="modal calendar-dialog"
           aria-labelledby="calendar-create-title"
           ref={(node) => {
+            dialog.current = node;
             if (node && !node.open) {
               node.showModal();
               node.querySelector("input")?.focus();
@@ -437,7 +453,7 @@ export function CalendarView(
           }}
           onCancel={(e) => {
             e.preventDefault();
-            setDraft(null);
+            close();
           }}
           onKeyDown={(e) => e.stopPropagation()}
         >
@@ -446,7 +462,7 @@ export function CalendarView(
               <span className="eyebrow">PROJECT CALENDAR</span>
               <h2 id="calendar-create-title">创建日历任务</h2>
             </div>
-            <button aria-label="关闭创建任务" onClick={() => setDraft(null)}>
+            <button aria-label="关闭创建任务" onClick={close}>
               <X size={19} />
             </button>
           </header>
@@ -461,7 +477,7 @@ export function CalendarView(
               )
                 return;
               p.create({ ...draft, name: draft.name.trim() });
-              setDraft(null);
+              close();
             }}
           >
             <label>
@@ -498,7 +514,7 @@ export function CalendarView(
               </label>
             </div>
             <footer>
-              <button type="button" onClick={() => setDraft(null)}>
+              <button type="button" onClick={close}>
                 取消
               </button>
               <button

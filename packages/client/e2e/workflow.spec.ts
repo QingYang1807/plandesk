@@ -514,4 +514,52 @@ test.describe("calendar task creation", () => {
       ]);
     await session.detach();
   });
+  test("closing the dialog restores date focus without indenting saved tasks", async ({
+    page,
+    request,
+  }) => {
+    for (const d of ["2026-11-12", "2026-11-13"]) {
+      await page
+        .getByRole("button", { name: `${d} 创建任务`, exact: true })
+        .click();
+      const dialog = page.getByRole("dialog", { name: "创建日历任务" });
+      await dialog
+        .getByLabel("任务名称", { exact: true })
+        .fill("焦点任务 " + d);
+      await page.keyboard.press("Enter");
+      await expect(dialog).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: `${d} 创建任务`, exact: true }),
+      ).toBeFocused();
+      // Do not focus a locator here: the next real keystroke must stay in the calendar.
+      await page.keyboard.press("Tab");
+      await expect(page.locator(".calendar-grid :focus")).toHaveCount(1);
+    }
+    await expect
+      .poll(async () =>
+        (
+          (await (
+            await request.get("/api/projects/" + project.project.id)
+          ).json()) as Plan
+        ).tasks.map((t) => t.parentId),
+      )
+      .toEqual([null, null]);
+    const date = page.getByRole("button", {
+      name: "2026-11-14 创建任务",
+      exact: true,
+    });
+    await date.click();
+    await page.keyboard.press("Escape");
+    await expect(date).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: "2026-11-15 创建任务", exact: true }),
+    ).toBeFocused();
+    await date.click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "取消", exact: true })
+      .click();
+    await expect(date).toBeFocused();
+  });
 });
