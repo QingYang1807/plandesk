@@ -267,7 +267,11 @@ export function App() {
       return auto ? api<Plan>("schedule", p) : p;
     });
   }
-  function add(parent: string | null = null, after?: string) {
+  function add(
+    parent: string | null = null,
+    after?: string,
+    draft?: Pick<Task, "name" | "start" | "end">,
+  ) {
     change((p) => {
       const id = crypto.randomUUID();
       const prev = p.tasks.find((t) => t.id === after);
@@ -281,15 +285,18 @@ export function App() {
         taskSchema.parse({
           id,
           name: "新任务",
+          ...draft,
           parentId: parent,
           order: prev
             ? prev.order + 0.01
             : Math.max(0, ...p.tasks.map((t) => t.order)) + 1,
         }),
       );
-      pendingFocus.current = id;
       setSelected([id]);
-      setView("gantt");
+      if (!draft) {
+        pendingFocus.current = id;
+        setView("gantt");
+      }
       return p;
     });
   }
@@ -1290,6 +1297,7 @@ export function App() {
             ) : view === "calendar" ? (
               <CalendarView
                 plan={plan}
+                create={(task) => add(null, undefined, task)}
                 open={setDetail}
                 update={update}
                 critical={critical}

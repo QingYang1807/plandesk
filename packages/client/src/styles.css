@@ -1526,7 +1526,7 @@ small {
 }
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   border-left: 1px solid var(--border);
   border-top: 1px solid var(--border);
 }
@@ -1539,6 +1539,9 @@ small {
   border-bottom: 1px solid var(--border);
 }
 .calendar-day {
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
   min-height: 100px;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -1548,11 +1551,42 @@ small {
 .calendar-day.current {
   background: #f0f3ff;
 }
-.calendar-day > span {
-  color: #9ca7bc;
-  font-size: 10px;
+.calendar-day:hover {
+  background: #f7f8fe;
 }
-.calendar-day button {
+.calendar-day.selected {
+  background: #e7ebff;
+  box-shadow: inset 0 0 0 1px #a3aee4;
+}
+.calendar-day.outside-month .calendar-date {
+  color: #bbc2d0;
+}
+.calendar-day .calendar-date {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8a97b0;
+  font-size: 10px;
+  cursor: crosshair;
+}
+.calendar-add {
+  opacity: 0;
+}
+.calendar-day:hover .calendar-add,
+.calendar-date:focus-visible .calendar-add {
+  opacity: 1;
+}
+.calendar-date:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 4px;
+}
+.calendar-dialog::backdrop {
+  background: #14203c55;
+}
+.calendar-day [data-calendar-task] {
   display: block;
   font-size: 8px;
   background: #f1f3fc;

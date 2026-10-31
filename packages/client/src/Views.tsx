@@ -16,6 +16,7 @@ import {
   Clock,
   AlertTriangle,
   ArrowUpRight,
+  X,
 } from "lucide-react";
 type Props = {
   plan: Plan;
@@ -277,9 +278,20 @@ export function Kanban(p: Props) {
     </div>
   );
 }
-export function CalendarView(p: Props) {
+export function CalendarView(
+  p: Props & { create: (task: Pick<Task, "name" | "start" | "end">) => void },
+) {
   const [anchor, setAnchor] = useState(p.plan.project.start.slice(0, 7));
   const [mode, setMode] = useState("month");
+  const [selection, setSelection] = useState<{
+    start: string;
+    end: string;
+  } | null>(null);
+  const [draft, setDraft] = useState<{
+    name: string;
+    start: string;
+    end: string;
+  } | null>(null);
   function shift(n: number) {
     const d = new Date(anchor + "-01T00:00:00Z");
     d.setUTCMonth(d.getUTCMonth() + n);
@@ -289,6 +301,7 @@ export function CalendarView(p: Props) {
   const month = Number(anchor.slice(5)) - 1;
   const first = day(`${year}-${String(month + 1).padStart(2, "0")}-01`);
   const start = first - ((new Date(first * 86400000).getUTCDay() + 6) % 7);
+  const range = selection ? [selection.start, selection.end].sort() : null;
   return (
     <div className="view-pad">
       <div className="section-heading">
@@ -297,7 +310,7 @@ export function CalendarView(p: Props) {
           <h2>
             {year} 年 {month + 1} 月
           </h2>
-          <p>查看任务起点、截止与里程碑；使用月份导航浏览整个项目。</p>
+          <p>点击日期创建任务，按住并滑过多个日期可创建跨日任务。</p>
         </div>
         <div className="check-row">
           <button onClick={() => shift(-1)}>← 上月</button>
@@ -309,7 +322,55 @@ export function CalendarView(p: Props) {
           </select>
         </div>
       </div>
-      <div className="calendar-grid">
+      <div
+        className="calendar-grid"
+        onPointerDown={(e) => {
+          if (
+            e.button !== 0 ||
+            !e.isPrimary ||
+            (e.target as HTMLElement).closest("[data-calendar-task]")
+          )
+            return;
+          const d = (e.target as HTMLElement).closest<HTMLElement>(
+            "[data-calendar-date]",
+          )?.dataset.calendarDate;
+          if (!d) return;
+          e.preventDefault();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setSelection({ start: d, end: d });
+        }}
+        onPointerMove={(e) => {
+          if (!selection || !e.currentTarget.hasPointerCapture(e.pointerId))
+            return;
+          const cell = document
+            .elementFromPoint(e.clientX, e.clientY)
+            ?.closest<HTMLElement>("[data-calendar-date]");
+          if (cell?.dataset.calendarDate && e.currentTarget.contains(cell)) {
+            const end = cell.dataset.calendarDate;
+            setSelection({ ...selection, end });
+          }
+        }}
+        onPointerUp={(e) => {
+          if (!selection || !e.currentTarget.hasPointerCapture(e.pointerId))
+            return;
+          const cell = document
+            .elementFromPoint(e.clientX, e.clientY)
+            ?.closest<HTMLElement>("[data-calendar-date]");
+          if (cell?.dataset.calendarDate && e.currentTarget.contains(cell)) {
+            const range = [selection.start, cell.dataset.calendarDate].sort();
+            setDraft({ name: "", start: range[0], end: range[1] });
+          }
+          setSelection(null);
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }}
+        onPointerCancel={() => setSelection(null)}
+        onLostPointerCapture={() => setSelection(null)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setSelection(null);
+          if (["Enter", " ", "Escape", "Tab"].includes(e.key))
+            e.stopPropagation();
+        }}
+      >
         {["一", "二", "三", "四", "五", "六", "日"].map((n) => (
           <div className="weekday" key={n}>
             周{n}
@@ -319,16 +380,39 @@ export function CalendarView(p: Props) {
           const d = date(start + i);
           return (
             <div
-              className={"calendar-day " + (d === today() ? "current" : "")}
+              className={[
+                "calendar-day",
+                d === today() ? "current" : "",
+                range && d >= range[0] && d <= range[1] ? "selected" : "",
+                d.slice(0, 7) !== anchor ? "outside-month" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              data-calendar-date={d}
               key={d}
             >
-              <span>{Number(d.slice(8))}</span>
+              <button
+                className="calendar-date"
+                aria-label={`${d} 创建任务`}
+                onClick={(e) => {
+                  if (e.detail === 0) setDraft({ name: "", start: d, end: d });
+                }}
+              >
+                <span>{Number(d.slice(8))}</span>
+                <span className="calendar-add" aria-hidden="true">
+                  +
+                </span>
+              </button>
               {p.plan.tasks
                 .filter(
                   (t) => t.type !== "phase" && (t.start === d || t.end === d),
                 )
                 .map((t) => (
-                  <button key={t.id} onClick={() => p.open(t.id)}>
+                  <button
+                    data-calendar-task
+                    key={t.id}
+                    onClick={() => p.open(t.id)}
+                  >
                     {t.type === "milestone"
                       ? "◆ "
                       : t.end === d
@@ -341,6 +425,98 @@ export function CalendarView(p: Props) {
           );
         })}
       </div>
+      {draft && (
+        <dialog
+          className="modal calendar-dialog"
+          aria-labelledby="calendar-create-title"
+          ref={(node) => {
+            if (node && !node.open) {
+              node.showModal();
+              node.querySelector("input")?.focus();
+            }
+          }}
+          onCancel={(e) => {
+            e.preventDefault();
+            setDraft(null);
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <header>
+            <div>
+              <span className="eyebrow">PROJECT CALENDAR</span>
+              <h2 id="calendar-create-title">创建日历任务</h2>
+            </div>
+            <button aria-label="关闭创建任务" onClick={() => setDraft(null)}>
+              <X size={19} />
+            </button>
+          </header>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (
+                !draft.name.trim() ||
+                !draft.start ||
+                !draft.end ||
+                draft.end < draft.start
+              )
+                return;
+              p.create({ ...draft, name: draft.name.trim() });
+              setDraft(null);
+            }}
+          >
+            <label>
+              任务名称
+              <input
+                autoFocus
+                required
+                value={draft.name}
+                placeholder="输入任务名称"
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              />
+            </label>
+            <div className="form-grid">
+              <label>
+                开始日期
+                <input
+                  required
+                  type="date"
+                  value={draft.start}
+                  onChange={(e) =>
+                    setDraft({ ...draft, start: e.target.value })
+                  }
+                />
+              </label>
+              <label>
+                结束日期
+                <input
+                  required
+                  type="date"
+                  min={draft.start}
+                  value={draft.end}
+                  onChange={(e) => setDraft({ ...draft, end: e.target.value })}
+                />
+              </label>
+            </div>
+            <footer>
+              <button type="button" onClick={() => setDraft(null)}>
+                取消
+              </button>
+              <button
+                className="primary"
+                type="submit"
+                disabled={
+                  !draft.name.trim() ||
+                  !draft.start ||
+                  !draft.end ||
+                  draft.end < draft.start
+                }
+              >
+                创建任务
+              </button>
+            </footer>
+          </form>
+        </dialog>
+      )}
     </div>
   );
 }

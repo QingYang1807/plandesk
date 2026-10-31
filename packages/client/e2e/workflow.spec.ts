@@ -6,6 +6,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import type { Plan } from "@plandesk/schema";
 const root = path.resolve("../..");
+const port = process.env.PLANDESK_TEST_PORT ?? "4320";
 const evidence = path.join(root, "artifacts/screenshots");
 const dir = mkdtempSync(path.join(tmpdir(), "plandesk-browser-"));
 let server: ChildProcess | undefined;
@@ -18,7 +19,7 @@ async function start() {
       cwd: root,
       env: {
         ...process.env,
-        PORT: "4320",
+        PORT: port,
         PLANDESK_DB: path.join(dir, "e2e.sqlite"),
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -28,7 +29,7 @@ async function start() {
   server.stderr?.on("data", (c) => (log += String(c)));
   for (let i = 0; i < 50; i++) {
     if (server.exitCode !== null) throw Error("Local server failed: " + log);
-    const response = await fetch("http://127.0.0.1:4320/api/health").catch(
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`).catch(
       () => null,
     );
     if (response?.ok) {
@@ -92,7 +93,11 @@ test("complete project lifecycle with real UI, exports and restart", async ({
     exact: true,
   });
   await child.fill("浏览器验证任务");
-  await child.press("Tab");
+  // Tab changes hierarchy without blurring the name input; commit its name first.
+  await child.blur();
+  await page
+    .getByRole("textbox", { name: "任务名称 浏览器验证任务", exact: true })
+    .press("Tab");
   await expect
     .poll(
       async () =>
@@ -104,7 +109,7 @@ test("complete project lifecycle with real UI, exports and restart", async ({
     .getByRole("button", { name: "详情 浏览器验证任务", exact: true })
     .click();
   await page.getByLabel("详情计划开始").fill("2026-11-02");
-  await page.getByLabel("详情计划开始").press("Tab");
+  await page.getByLabel("详情计划开始").blur();
   await expect
     .poll(
       async () =>
@@ -112,7 +117,7 @@ test("complete project lifecycle with real UI, exports and restart", async ({
     )
     .toBe("2026-11-02");
   await page.getByLabel("详情计划结束").fill("2026-11-04");
-  await page.getByLabel("详情计划结束").press("Tab");
+  await page.getByLabel("详情计划结束").blur();
   await page.getByRole("button", { name: "关闭详情" }).click();
   await expect
     .poll(
@@ -123,7 +128,7 @@ test("complete project lifecycle with real UI, exports and restart", async ({
   await page
     .getByLabel("end 浏览器验证任务", { exact: true })
     .fill("2026-11-05");
-  await page.getByLabel("end 浏览器验证任务", { exact: true }).press("Tab");
+  await page.getByLabel("end 浏览器验证任务", { exact: true }).blur();
   await expect
     .poll(
       async () =>
@@ -151,16 +156,16 @@ test("complete project lifecycle with real UI, exports and restart", async ({
     exact: true,
   });
   await next.fill("交付里程碑");
-  await next.press("Tab");
+  await next.blur();
   await page
     .getByRole("button", { name: "详情 交付里程碑", exact: true })
     .click();
   await page
     .locator(".detail-panel")
-    .getByLabel("任务类型", { exact: true })
+    .getByLabel("任务类型")
     .selectOption("milestone");
   await page.getByLabel("详情计划开始").fill("2026-11-02");
-  await page.getByLabel("详情计划开始").press("Tab");
+  await page.getByLabel("详情计划开始").blur();
   await page.getByLabel("前置任务").selectOption(t.id);
   await page.getByRole("button", { name: "添加依赖", exact: true }).click();
   await expect.poll(async () => (await get()).dependencies.length).toBe(37);
@@ -234,4 +239,279 @@ test("complete project lifecycle with real UI, exports and restart", async ({
   expect(imported.tasks).toEqual(before.tasks);
   expect(imported.dependencies).toEqual(before.dependencies);
   expect(errors).toEqual([]);
+});
+
+test.describe("calendar task creation", () => {
+  let project: Plan;
+  test.beforeEach(async ({ page, request }, info) => {
+    project = await (
+      await request.post("/api/projects", {
+        data: {
+          name: "日历验收 " + info.title,
+          start: "2026-11-01",
+          template: "空白项目",
+        },
+      })
+    ).json();
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await page.goto("/");
+    await page
+      .getByRole("heading", { name: project.project.name, exact: true })
+      .click();
+    await page.getByRole("button", { name: "日历", exact: true }).click();
+  });
+  test("click creates one dated task with persistence and undo", async ({
+    page,
+    request,
+  }) => {
+    await page
+      .locator(".calendar-day")
+      .filter({ has: page.getByText("12", { exact: true }) })
+      .click({ position: { x: 40, y: 70 } });
+    const dialog = page.getByRole("dialog", { name: "创建日历任务" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("开始日期", { exact: true })).toHaveValue(
+      "2026-11-12",
+    );
+    await expect(dialog.getByLabel("结束日期", { exact: true })).toHaveValue(
+      "2026-11-12",
+    );
+    await dialog.getByLabel("任务名称", { exact: true }).fill("   ");
+    await expect(
+      dialog.getByRole("button", { name: "创建任务", exact: true }),
+    ).toBeDisabled();
+    await dialog
+      .getByLabel("任务名称", { exact: true })
+      .fill("  日历单日任务  ");
+    await dialog.getByRole("button", { name: "创建任务", exact: true }).click();
+    const get = async () =>
+      (await (
+        await request.get("/api/projects/" + project.project.id)
+      ).json()) as Plan;
+    await expect
+      .poll(async () => (await get()).tasks)
+      .toEqual([
+        expect.objectContaining({
+          name: "日历单日任务",
+          start: "2026-11-12",
+          end: "2026-11-12",
+          parentId: null,
+        }),
+      ]);
+    await expect(page.locator(".calendar-grid")).toBeVisible();
+    await page.getByRole("button", { name: "撤销", exact: true }).click();
+    await expect.poll(async () => (await get()).tasks.length).toBe(0);
+    await page.getByRole("button", { name: "重做", exact: true }).click();
+    await expect.poll(async () => (await get()).tasks.length).toBe(1);
+    await page.reload();
+    await page
+      .getByRole("heading", { name: project.project.name, exact: true })
+      .click();
+    await page.getByRole("button", { name: "日历", exact: true }).click();
+    await page
+      .locator(".calendar-grid")
+      .getByRole("button", { name: "截止 · 日历单日任务", exact: true })
+      .click();
+    await expect(page.getByLabel("详情任务名称")).toHaveValue("日历单日任务");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+  for (const range of [
+    {
+      from: "2026-11-06",
+      to: "2026-11-10",
+      start: "2026-11-06",
+      end: "2026-11-10",
+    },
+    {
+      from: "2026-12-02",
+      to: "2026-11-28",
+      start: "2026-11-28",
+      end: "2026-12-02",
+    },
+  ]) {
+    test(`drag ${range.from} to ${range.to} creates an inclusive range`, async ({
+      page,
+      request,
+    }) => {
+      const from = await page
+        .locator(`[data-calendar-date="${range.from}"]`)
+        .boundingBox();
+      const to = await page
+        .locator(`[data-calendar-date="${range.to}"]`)
+        .boundingBox();
+      await page.mouse.move(from!.x + 40, from!.y + 70);
+      await page.mouse.down();
+      await page.mouse.move(to!.x + 40, to!.y + 70, { steps: 12 });
+      await expect(page.locator(".calendar-day.selected")).toHaveCount(5);
+      await page.screenshot({
+        path: path.join(evidence, `calendar-range-${range.from}.png`),
+      });
+      await page.mouse.up();
+      const dialog = page.getByRole("dialog", { name: "创建日历任务" });
+      await expect(dialog.getByLabel("开始日期", { exact: true })).toHaveValue(
+        range.start,
+      );
+      await expect(dialog.getByLabel("结束日期", { exact: true })).toHaveValue(
+        range.end,
+      );
+      await dialog.getByLabel("任务名称", { exact: true }).fill("跨日工作包");
+      await dialog.getByLabel("任务名称", { exact: true }).press("Enter");
+      await expect
+        .poll(
+          async () =>
+            (
+              (await (
+                await request.get("/api/projects/" + project.project.id)
+              ).json()) as Plan
+            ).tasks,
+        )
+        .toEqual([
+          expect.objectContaining({
+            name: "跨日工作包",
+            start: range.start,
+            end: range.end,
+          }),
+        ]);
+      await expect(page.locator(".calendar-grid")).toBeVisible();
+      await expect(page.locator(".calendar-day.selected")).toHaveCount(0);
+      await expect(page.getByRole("alert")).toHaveCount(0);
+    });
+  }
+  test("keyboard creation validates dates and cancellation never writes", async ({
+    page,
+    request,
+  }) => {
+    await page.setViewportSize({ width: 1000, height: 1000 });
+    const date = page.getByRole("button", {
+      name: "2026-11-12 创建任务",
+      exact: true,
+    });
+    await date.focus();
+    await date.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "创建日历任务" });
+    await expect(dialog.getByLabel("任务名称", { exact: true })).toBeFocused();
+    await dialog.getByLabel("任务名称", { exact: true }).fill("键盘创建");
+    await dialog.getByLabel("结束日期", { exact: true }).fill("2026-11-11");
+    await expect(
+      dialog.getByRole("button", { name: "创建任务", exact: true }),
+    ).toBeDisabled();
+    await page.screenshot({
+      path: path.join(evidence, "calendar-create-narrow.png"),
+    });
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    await date.focus();
+    await date.press("Space");
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    const cell = await page
+      .locator('[data-calendar-date="2026-11-12"]')
+      .boundingBox();
+    await page.mouse.move(cell!.x + 40, cell!.y + 70);
+    await page.mouse.down();
+    await page.mouse.move(1, 1, { steps: 8 });
+    await page.mouse.up();
+    await expect(dialog).toHaveCount(0);
+    expect(
+      (
+        (await (
+          await request.get("/api/projects/" + project.project.id)
+        ).json()) as Plan
+      ).tasks,
+    ).toEqual([]);
+    await date.focus();
+    await date.press("Enter");
+    await dialog.getByLabel("任务名称", { exact: true }).fill("键盘创建");
+    await dialog.getByLabel("开始日期", { exact: true }).fill("2026-11-13");
+    await dialog.getByLabel("结束日期", { exact: true }).fill("2026-11-14");
+    await dialog.getByRole("button", { name: "创建任务", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect
+      .poll(
+        async () =>
+          (
+            (await (
+              await request.get("/api/projects/" + project.project.id)
+            ).json()) as Plan
+          ).tasks,
+      )
+      .toEqual([
+        expect.objectContaining({
+          name: "键盘创建",
+          start: "2026-11-13",
+          end: "2026-11-14",
+        }),
+      ]);
+    await page
+      .getByRole("button", { name: "2026-11-20 创建任务", exact: true })
+      .press("Tab");
+    await expect(
+      page.getByRole("button", { name: "2026-11-21 创建任务", exact: true }),
+    ).toBeFocused();
+  });
+  test("touch swipe selects dates and pointer cancellation clears the preview", async ({
+    page,
+    request,
+  }) => {
+    const session = await page.context().newCDPSession(page);
+    const from = await page
+      .locator('[data-calendar-date="2026-11-03"]')
+      .boundingBox();
+    const to = await page
+      .locator('[data-calendar-date="2026-11-05"]')
+      .boundingBox();
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: from!.x + 40, y: from!.y + 70 }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: to!.x + 40, y: to!.y + 70 }],
+    });
+    await expect(page.locator(".calendar-day.selected")).toHaveCount(3);
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchCancel",
+      touchPoints: [],
+    });
+    await expect(page.locator(".calendar-day.selected")).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: from!.x + 40, y: from!.y + 70 }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: to!.x + 40, y: to!.y + 70 }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    const dialog = page.getByRole("dialog", { name: "创建日历任务" });
+    await expect(dialog.getByLabel("开始日期", { exact: true })).toHaveValue(
+      "2026-11-03",
+    );
+    await expect(dialog.getByLabel("结束日期", { exact: true })).toHaveValue(
+      "2026-11-05",
+    );
+    await dialog.getByLabel("任务名称", { exact: true }).fill("触屏滑动任务");
+    await dialog.getByRole("button", { name: "创建任务", exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          (
+            (await (
+              await request.get("/api/projects/" + project.project.id)
+            ).json()) as Plan
+          ).tasks,
+      )
+      .toEqual([
+        expect.objectContaining({
+          name: "触屏滑动任务",
+          start: "2026-11-03",
+          end: "2026-11-05",
+        }),
+      ]);
+    await session.detach();
+  });
 });

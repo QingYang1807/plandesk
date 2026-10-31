@@ -3,6 +3,7 @@ packages/client/dist/
 data/*
 !data/.gitkeep
 artifacts/test-results/
+artifacts/screenshots/
 artifacts/playwright-report/
 *.log
 .DS_Store

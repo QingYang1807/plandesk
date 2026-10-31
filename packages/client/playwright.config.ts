@@ -4,7 +4,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60000,
   use: {
-    baseURL: "http://127.0.0.1:4320",
+    baseURL: `http://127.0.0.1:${process.env.PLANDESK_TEST_PORT ?? "4320"}`,
     viewport: { width: 1440, height: 900 },
     acceptDownloads: true,
   },
